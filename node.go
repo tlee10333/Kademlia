@@ -4,14 +4,16 @@ package main
 
 //Server Node
 type Node struct {
-	ID int
-	KV map[string]string
+	ID           int
+	KV           map[int]string
+	RoutingTable RoutingTable
 }
 
 func NewNode(id int) *Node {
 	return &Node{
-		ID: id,
-		KV: make(map[string]string),
+		ID:           id,
+		KV:           make(map[int]string),
+		RoutingTable: *NewRoutingTable(id, 4, 5),
 	}
 }
 
@@ -19,18 +21,22 @@ func (node *Node) GetID() int {
 	return node.ID
 }
 
-func (node *Node) FindKV(key string) (string, bool) {
+func (node *Node) FindKV(key int) (string, bool) {
 	value, isFound := node.KV[key]
 	return value, isFound
 }
 
-func (node *Node) InsertKV(key string, value string) bool {
+func (node *Node) InsertKV(key int, value string) bool {
 	node.KV[key] = value
 	_, isFound := node.FindKV(key)
 	return isFound
 }
-func (node *Node) DeleteKV(key string) bool {
+func (node *Node) DeleteKV(key int) bool {
 	delete(node.KV, key)
 	_, isFound := node.FindKV(key)
-	return isFound  
+	return isFound
+}
+
+func Xor(a int, b int) int {
+	return a ^ b
 }

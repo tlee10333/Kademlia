@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha1"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"strconv"
@@ -11,11 +13,13 @@ import (
 	"time"
 )
 
+const bitLength = 4
+
 // Message represents a Kademlia RPC-style message
 type Message struct {
 	Type  string `json:"type"` // ping, store, find_node, find_value
 	From  int    `json:"from"` // Sender node ID
-	Key   string `json:"key,omitempty"`
+	Key   int    `json:"key,omitempty"`
 	Value string `json:"value,omitempty"`
 }
 
@@ -91,12 +95,12 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 	conn.WriteToUDP(respBytes, addr)
 }
 
-func sendMessage(toPort int, msg Message) {
+func sendMessage(addr net.UDPAddr, msg Message) {
 
-	addr := net.UDPAddr{
-		Port: toPort,
-		IP:   net.ParseIP("127.0.0.1"),
-	}
+	// addr := net.UDPAddr{
+	// 	Port: toPort,
+	// 	IP:   net.ParseIP("127.0.0.1"),
+	// }
 
 	conn, err := net.DialUDP("udp", nil, &addr)
 
@@ -116,10 +120,90 @@ func sendMessage(toPort int, msg Message) {
 	fmt.Printf("Response: %s\n", string(buffer[:n]))
 }
 
+//******************Helper Functions*********************
+
+func Atoi(s string) int {
+	num, err := strconv.Atoi(s)
+
+	if err != nil {
+		fmt.Println("Cannot Convert String to Int")
+		return -1
+	}
+
+	return num
+}
+
+func HashToIntNBits(input string, n int) int {
+	if n <= 0 || n > 31 { // conservative for 32-bit systems
+		panic("HashToIntNBits: n must be between 1 and 31")
+	}
+
+	fullHash := sha1.Sum([]byte(input)) // [20]byte = 160 bits
+
+	// Convert hash to big.Int
+	hashInt := new(big.Int).SetBytes(fullHash[:])
+
+	// Shift right to extract the top `n` bits
+	shifted := new(big.Int).Rsh(hashInt, uint(160-n))
+	fmt.Printf("Key: %s is  now %d \n", input, shifted)
+
+	// Convert to int safely
+	return int(shifted.Int64())
+
+}
+
+// arbitrary NodeID generator (based off of port number)
+func NodeIDGenerator(number int, n int) int {
+	// Extract the last `n` bits by performing a modulo operation
+	lastBits := number % (1 << n) // (1 << n) is equivalent to 2^n
+
+	return lastBits
+}
+
+// // FindValue locates which bucket/key should be queried and sends a FIND_VALUE message
+// func (node *Node) FindValue(key string) {
+// 	// Step 1: Hash key to int ID
+
+// 	// Step 2: Compute distance to SelfID
+// 	keyID := Atoi(key)
+// 	if keyID == -1 {
+// 		fmt.Println("FAILED KEY")
+// 		return
+// 	}
+
+// 	_, bucketIndex, bucket := node.RoutingTable.FindNode(keyID) //Only care about the bucket
+
+// 	if bucketIndex < 0 || bucketIndex >= len(node.RoutingTable.Buckets) {
+// 		fmt.Println("No valid bucket found for this key.")
+// 		return
+// 	}
+
+// 	// Step 4: Get bucket and iterate through nodes
+// 	if len(bucket) == 0 {
+// 		fmt.Printf("Bucket %d is empty. No nodes to contact.\n", bucketIndex)
+// 		return
+// 	}
+
+// 	// Step 5: Send FIND_VALUE to all nodes in the selected bucket
+// 	for _, nodeInfo := range bucket {
+// 		msg := Message{
+// 			Type:  "find_value",
+// 			From:  node.ID,
+// 			Key:   key,
+// 			Value: "",
+// 		}
+
+// 		sendMessage(nodeInfo.Addr, msg)
+
+// 	}
+// }
+
 func main() {
 
 	port, _ := strconv.Atoi(os.Args[1])
-	node := NewNode(port)
+	nodeID := NodeIDGenerator(port, bitLength)
+	node := NewNode(nodeID)
+	fmt.Printf("SERVER NODE ID: %d\n", node.GetID())
 
 	// Run the server in a goroutine
 	go StartServer(node, port)
@@ -131,31 +215,62 @@ func main() {
 
 	reader := bufio.NewReader(os.Stdin)
 
+	//SuperLoop for Sending Messages
 	for {
 		fmt.Println("SEND A MESSAGE")
 		line, _ := reader.ReadString('\n')
 		parts := strings.Fields(strings.TrimSpace(line))
-		if len(parts) < 3 {
-			fmt.Println("Invalid command")
-			continue
-		}
 
-		cmd, targetAddr, key := parts[0], parts[1], parts[2]
-		toPort, _ := strconv.Atoi(targetAddr)
-
+		cmd := parts[0]
 		value := ""
-		if len(parts) == 4 {
+		key := 0
+
+		switch cmd {
+		case "ping":
+			toPort := Atoi(parts[1])
+
+			addr := net.UDPAddr{
+				Port: toPort,
+				IP:   net.ParseIP("127.0.0.1"),
+			}
+			msg := Message{
+				Type:  cmd,
+				From:  node.ID,
+				Key:   key,
+				Value: value,
+			}
+			sendMessage(addr, msg)
+		case "store":
+			toPort := Atoi(parts[1])
+			key = HashToIntNBits(parts[2], bitLength)
 			value = parts[3]
-		}
 
-		msg := Message{
-			Type:  cmd,
-			From:  node.ID,
-			Key:   key,
-			Value: value,
-		}
+			msg := Message{
+				Type:  cmd,
+				From:  node.ID,
+				Key:   key,
+				Value: value,
+			}
+			addr := net.UDPAddr{
+				Port: toPort,
+				IP:   net.ParseIP("127.0.0.1"),
+			}
 
-		sendMessage(toPort, msg)
+			sendMessage(addr, msg)
+
+		case "find_value":
+			key = HashToIntNBits(parts[2], bitLength)
+
+			//try to find key in our's first
+			value, isFound := node.FindKV(key)
+			if isFound {
+				fmt.Printf("Key %s is in Server Node %d with value: %s \n", parts[2], node.ID, value)
+			} else {
+				//Find everyone in the closest bucket and ask them if they have it
+
+			}
+
+		}
 
 	}
 

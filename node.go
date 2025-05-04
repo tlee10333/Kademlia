@@ -2,16 +2,20 @@
 
 package main
 
+import "net"
+
 //Server Node
 type Node struct {
 	ID           int
+	ADDR         net.UDPAddr
 	KV           map[int]string
 	RoutingTable RoutingTable
 }
 
-func NewNode(id int) *Node {
+func NewNode(id int, addr net.UDPAddr) *Node {
 	return &Node{
 		ID:           id,
+		ADDR:         addr,
 		KV:           make(map[int]string),
 		RoutingTable: *NewRoutingTable(id, 4, 5),
 	}

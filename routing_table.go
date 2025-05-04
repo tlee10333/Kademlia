@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"math/bits"
 	"net"
-	"time"
 	"sort"
+	"time"
 )
 
 type NodeInfo struct {
-	ID		  int
+	ID        int
 	Addr      net.UDPAddr
 	TimeStamp int64
 }
 
 func NewNodeInfo(id int, address net.UDPAddr) *NodeInfo {
 	return &NodeInfo{
-		ID: 	   id,
+		ID:        id,
 		Addr:      address,
 		TimeStamp: time.Now().Unix(),
 	}
@@ -67,6 +67,7 @@ func (rt *RoutingTable) PrintBucketList(bucket Bucket) {
 }
 
 func (rt *RoutingTable) InsertNode(nodeID int, NodeAddr net.UDPAddr) {
+
 	if nodeID == rt.SelfID {
 		return // Don't insert self
 	}
@@ -77,6 +78,8 @@ func (rt *RoutingTable) InsertNode(nodeID int, NodeAddr net.UDPAddr) {
 		if len(bucket) < rt.K {
 
 			bucket[nodeID] = *NewNodeInfo(nodeID, NodeAddr) // Replace with actual address
+			distance := Xor(rt.SelfID, nodeID)
+			fmt.Printf("Node ID %d distance to self Node %d is XOR of %04b and %04b which is %04b \n", nodeID, rt.SelfID, nodeID, rt.SelfID, distance)
 			fmt.Printf("Successfully added node %d to bucket %d\n", nodeID, prefixIndex)
 		} else {
 			fmt.Printf("Bucket %d is full, dropping node %d\n", prefixIndex, nodeID)
@@ -100,10 +103,7 @@ func (rt *RoutingTable) DeleteNode(nodeID int) {
 
 }
 
-
 //Need to verify these
-
-
 
 // FindClosestNodes returns the k nodes closest to the target ID
 func (rt *RoutingTable) FindClosestNodes(targetID int, count int) []NodeInfo {
@@ -129,7 +129,6 @@ func (rt *RoutingTable) FindClosestNodes(targetID int, count int) []NodeInfo {
 	return allNodes
 }
 
-
 // SortByDistance sorts nodes by their XOR distance to the target ID
 func (rt *RoutingTable) SortByDistance(nodes []NodeInfo, targetID int) {
 	sort.Slice(nodes, func(i, j int) bool {
@@ -139,12 +138,11 @@ func (rt *RoutingTable) SortByDistance(nodes []NodeInfo, targetID int) {
 	})
 }
 
-
 // PrintRoutingTableSummary prints a summary of the routing table
 func (rt *RoutingTable) PrintRoutingTableSummary() {
 	fmt.Printf("Routing Table for Node %d:\n", rt.SelfID)
 	totalNodes := 0
-	
+
 	for i, bucket := range rt.Buckets {
 		nodeCount := len(bucket)
 		if nodeCount > 0 {
@@ -152,6 +150,6 @@ func (rt *RoutingTable) PrintRoutingTableSummary() {
 			totalNodes += nodeCount
 		}
 	}
-	
+
 	fmt.Printf("Total nodes: %d\n", totalNodes)
 }

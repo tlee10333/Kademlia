@@ -17,7 +17,7 @@ func NewNode(id int, addr net.UDPAddr) *Node {
 		ID:           id,
 		ADDR:         addr,
 		KV:           make(map[int]string),
-		RoutingTable: *NewRoutingTable(id, 4, 5),
+		RoutingTable: *NewRoutingTable(id, bitLength, K),
 	}
 }
 

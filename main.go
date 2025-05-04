@@ -19,11 +19,12 @@ const alpha = 3     // Concurrency parameter for iterative lookups
 
 // Message represents a Kademlia RPC-style message
 type Message struct {
-	Type    string     `json:"type"` // ping, store, find_node, find_value
-	From    int        `json:"from"` // Sender node ID
-	Key     int        `json:"key,omitempty"`
-	Value   string     `json:"value,omitempty"`
-	Closest []NodeInfo `json:"closest,omitempty"` // Used for find_node responses
+	Type    string      `json:"type"` // ping, store, find_node, find_value
+	From    int         `json:"from"` // Sender node ID
+	IP      net.UDPAddr `json: "ip"`  //IP of original (so from & IP can be different servers)
+	Key     int         `json:"key,omitempty"`
+	Value   string      `json:"value,omitempty"`
+	Closest []NodeInfo  `json:"closest,omitempty"` // Used for find_node responses
 }
 
 // StartServer initializes a UDP server and listens for incoming messages
@@ -68,20 +69,26 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 	fmt.Printf("Received %s from %d\n", msg.Type, msg.From)
 
 	// Update the routing table with the sender's information
-	node.RoutingTable.InsertNode(msg.From, *addr)
+	node.RoutingTable.InsertNode(msg.From, msg.IP)
 
 	var response Message
 
 	switch msg.Type {
 	case "ping":
 		// RPC 1: PING - just respond to confirm we're alive
-		response = Message{Type: "pong", From: node.ID}
+		response = Message{
+			Type: "pong",
+			IP:   node.ADDR,
+			From: node.ID}
 
 	case "store":
 		// RPC 2: STORE - store the key-value pair locally
 		fmt.Printf("Storing key %d with value %s\n", msg.Key, msg.Value)
 		node.InsertKV(msg.Key, msg.Value)
-		response = Message{Type: "store_ack", From: node.ID}
+		response = Message{
+			Type: "store_ack",
+			IP:   node.ADDR,
+			From: node.ID}
 
 	case "find_node":
 		// RPC 3: FIND_NODE - return k closest nodes to the target ID
@@ -90,6 +97,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 		response = Message{
 			Type:    "node_response",
 			From:    node.ID,
+			IP:    node.ADDR,
 			Closest: closest,
 		}
 
@@ -104,6 +112,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 			response = Message{
 				Type:    "node_response",
 				From:    node.ID,
+				IP:    node.ADDR,
 				Key:     msg.Key,
 				Closest: closest,
 			}
@@ -118,7 +127,8 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 }
 
 func sendMessage(addr net.UDPAddr, msg Message) (*Message, error) {
-	conn, err := net.DialUDP("udp", nil, &addr)
+
+	conn, err := net.DialUDP("udp", nil, &addr) //When we actually send messages, we open up a random port and send it
 	if err != nil {
 		fmt.Println("Could not dial remote UDP:", err)
 		return nil, err
@@ -375,7 +385,7 @@ func main() {
 	}
 
 	node := NewNode(nodeID, addr)
-	fmt.Printf("SERVER NODE ID: %d\n", node.GetID())
+	fmt.Printf("SERVER NODE ID: %d AT LOCALHOST ADDR PORT:%d \n", node.GetID(), node.ADDR.Port)
 
 	// Run the server in a goroutine
 	go StartServer(node, port)
@@ -445,6 +455,7 @@ func main() {
 
 			msg := Message{
 				Type: "ping",
+				IP:   node.ADDR,
 				From: node.ID,
 			}
 			sendMessage(addr, msg)
@@ -461,6 +472,7 @@ func main() {
 			msg := Message{
 				Type:  "store",
 				From:  node.ID,
+				IP:    node.ADDR,
 				Key:   key,
 				Value: value,
 			}

@@ -76,6 +76,7 @@ func (rt *RoutingTable) InsertNode(nodeID int, NodeAddr net.UDPAddr) {
 
 	if !isFound {
 		if len(bucket) < rt.K {
+			fmt.Printf("ADDING PORT: %d \n", NodeAddr.Port)
 
 			bucket[nodeID] = *NewNodeInfo(nodeID, NodeAddr) // Replace with actual address
 			distance := Xor(rt.SelfID, nodeID)

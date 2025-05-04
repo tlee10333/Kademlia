@@ -92,7 +92,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 	case "find_node":
 		// RPC 3: FIND_NODE - return k closest nodes to the target ID
 		fmt.Printf("Looking for closest nodes to %d\n", msg.Key)
-		closest := node.RoutingTable.FindClosestNodes(msg.Key, K)
+		closest := node.RoutingTable.FindClosestNodes(msg.Key)
 		response = Message{
 			Type:    "node_response",
 			From:    node.ID,
@@ -107,7 +107,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 			response = Message{Type: "found_value", From: node.ID, Key: msg.Key, Value: value}
 		} else {
 			fmt.Printf("Value not found for key %d, returning closest nodes\n", msg.Key)
-			closest := node.RoutingTable.FindClosestNodes(msg.Key, K)
+			closest := node.RoutingTable.FindClosestNodes(msg.Key)
 			response = Message{
 				Type:    "node_response",
 				From:    node.ID,

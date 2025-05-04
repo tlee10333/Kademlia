@@ -107,10 +107,8 @@ func (rt *RoutingTable) DeleteNode(nodeID int) {
 //Need to verify these
 
 // FindClosestNodes returns the k nodes closest to the target ID
-func (rt *RoutingTable) FindClosestNodes(targetID int, count int) []NodeInfo {
-	if count <= 0 {
+func (rt *RoutingTable) FindClosestNodes(targetID int ) []NodeInfo {
 		count = rt.K // Default to K if count is invalid
-	}
 
 	// Collect all nodes from all buckets
 	var allNodes []NodeInfo

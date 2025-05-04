@@ -15,7 +15,6 @@ import (
 
 const bitLength = 4 // Align with node.go's routing table creation
 const K = 5         // Align with node.go's routing table creation
-const alpha = 3     // Concurrency parameter for iterative lookups
 
 // Message represents a Kademlia RPC-style message
 type Message struct {
@@ -205,7 +204,7 @@ func (node *Node) IterativeFindValue(key int) string {
 	}
 
 	// If not found locally, we need to perform the iterative lookup
-	closestNodes := node.RoutingTable.FindClosestNodes(key, alpha)
+	closestNodes := node.RoutingTable.FindClosestNodes(key)
 
 	// Track nodes we've already queried
 	queried := make(map[int]bool)
@@ -267,7 +266,7 @@ func (node *Node) IterativeFindValue(key int) string {
 // Iterative FindNode - finds the K closest nodes to a given key
 func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
 	// Start with the closest nodes we know
-	closestNodes := node.RoutingTable.FindClosestNodes(targetID, alpha)
+	closestNodes := node.RoutingTable.FindClosestNodes(targetID)
 
 	// Track nodes we've already queried
 	queried := make(map[int]bool)

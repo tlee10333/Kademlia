@@ -7,15 +7,18 @@ import (
 	"math/bits"
 	"net"
 	"time"
+	"sort"
 )
 
 type NodeInfo struct {
+	ID		  int
 	Addr      net.UDPAddr
 	TimeStamp int64
 }
 
-func NewNodeInfo(address net.UDPAddr) *NodeInfo {
+func NewNodeInfo(id int, address net.UDPAddr) *NodeInfo {
 	return &NodeInfo{
+		ID: 	   id,
 		Addr:      address,
 		TimeStamp: time.Now().Unix(),
 	}
@@ -57,14 +60,13 @@ func (rt *RoutingTable) FindNode(nodeID int) (bool, int, Bucket) {
 }
 
 func (rt *RoutingTable) PrintBucketList(bucket Bucket) {
-
 	for nodeID, nodeInfo := range bucket {
 		fmt.Printf("NodeID: %d, Addr: %s, Time: %d\n", nodeID, nodeInfo.Addr, nodeInfo.TimeStamp)
 	}
 
 }
 
-func (rt *RoutingTable) InsertNode(nodeID int) {
+func (rt *RoutingTable) InsertNode(nodeID int, NodeAddr net.UDPAddr) {
 	if nodeID == rt.SelfID {
 		return // Don't insert self
 	}
@@ -73,17 +75,15 @@ func (rt *RoutingTable) InsertNode(nodeID int) {
 
 	if !isFound {
 		if len(bucket) < rt.K {
-			placeholder := net.UDPAddr{
-				Port: 1800,
-				IP:   net.ParseIP("127.0.0.1"),
-			}
-			bucket[nodeID] = *NewNodeInfo(placeholder) // Replace with actual address
+
+			bucket[nodeID] = *NewNodeInfo(nodeID, NodeAddr) // Replace with actual address
 			fmt.Printf("Successfully added node %d to bucket %d\n", nodeID, prefixIndex)
 		} else {
 			fmt.Printf("Bucket %d is full, dropping node %d\n", prefixIndex, nodeID)
 		}
 	} else {
 		fmt.Printf("Node %d already in bucket %d\n", nodeID, prefixIndex)
+
 	}
 }
 
@@ -98,4 +98,60 @@ func (rt *RoutingTable) DeleteNode(nodeID int) {
 
 	}
 
+}
+
+
+//Need to verify these
+
+
+
+// FindClosestNodes returns the k nodes closest to the target ID
+func (rt *RoutingTable) FindClosestNodes(targetID int, count int) []NodeInfo {
+	if count <= 0 {
+		count = rt.K // Default to K if count is invalid
+	}
+
+	// Collect all nodes from all buckets
+	var allNodes []NodeInfo
+	for _, bucket := range rt.Buckets {
+		for _, node := range bucket {
+			allNodes = append(allNodes, node)
+		}
+	}
+
+	// Sort nodes by XOR distance to target
+	rt.SortByDistance(allNodes, targetID)
+
+	// Return the k closest nodes
+	if len(allNodes) > count {
+		return allNodes[:count]
+	}
+	return allNodes
+}
+
+
+// SortByDistance sorts nodes by their XOR distance to the target ID
+func (rt *RoutingTable) SortByDistance(nodes []NodeInfo, targetID int) {
+	sort.Slice(nodes, func(i, j int) bool {
+		distI := Xor(nodes[i].ID, targetID)
+		distJ := Xor(nodes[j].ID, targetID)
+		return distI < distJ
+	})
+}
+
+
+// PrintRoutingTableSummary prints a summary of the routing table
+func (rt *RoutingTable) PrintRoutingTableSummary() {
+	fmt.Printf("Routing Table for Node %d:\n", rt.SelfID)
+	totalNodes := 0
+	
+	for i, bucket := range rt.Buckets {
+		nodeCount := len(bucket)
+		if nodeCount > 0 {
+			fmt.Printf("  Bucket %d: %d nodes\n", i, nodeCount)
+			totalNodes += nodeCount
+		}
+	}
+	
+	fmt.Printf("Total nodes: %d\n", totalNodes)
 }

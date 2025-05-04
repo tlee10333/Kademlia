@@ -82,6 +82,8 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 		} else {
 			response = Message{Type: "not_found", From: node.ID}
 		}
+	case "store_node":
+		response = Message{Type: "node_info", From: node.ID}
 
 	case "find_node":
 		// This would normally return a list of closest nodes. Simplified here.
@@ -160,49 +162,46 @@ func NodeIDGenerator(number int, n int) int {
 	return lastBits
 }
 
-// // FindValue locates which bucket/key should be queried and sends a FIND_VALUE message
-// func (node *Node) FindValue(key string) {
-// 	// Step 1: Hash key to int ID
+// FindValue locates which bucket/key should be queried and sends a FIND_VALUE message
+func (node *Node) FindValue(keyID int) {
 
-// 	// Step 2: Compute distance to SelfID
-// 	keyID := Atoi(key)
-// 	if keyID == -1 {
-// 		fmt.Println("FAILED KEY")
-// 		return
-// 	}
+	_, bucketIndex, bucket := node.RoutingTable.FindNode(keyID) //Only care about the bucket
 
-// 	_, bucketIndex, bucket := node.RoutingTable.FindNode(keyID) //Only care about the bucket
+	if bucketIndex < 0 || bucketIndex >= len(node.RoutingTable.Buckets) {
+		fmt.Println("No valid bucket found for this key.")
+		return
+	}
 
-// 	if bucketIndex < 0 || bucketIndex >= len(node.RoutingTable.Buckets) {
-// 		fmt.Println("No valid bucket found for this key.")
-// 		return
-// 	}
+	// Step 4: Get bucket and iterate through nodes
+	if len(bucket) == 0 {
+		fmt.Printf("Bucket %d is empty. No nodes to contact.\n", bucketIndex)
+		return
+	}
 
-// 	// Step 4: Get bucket and iterate through nodes
-// 	if len(bucket) == 0 {
-// 		fmt.Printf("Bucket %d is empty. No nodes to contact.\n", bucketIndex)
-// 		return
-// 	}
+	// Step 5: Send FIND_VALUE to all nodes in the selected bucket
+	for _, nodeInfo := range bucket {
+		msg := Message{
+			Type:  "find_value",
+			From:  node.ID,
+			Key:   keyID,
+			Value: "",
+		}
 
-// 	// Step 5: Send FIND_VALUE to all nodes in the selected bucket
-// 	for _, nodeInfo := range bucket {
-// 		msg := Message{
-// 			Type:  "find_value",
-// 			From:  node.ID,
-// 			Key:   key,
-// 			Value: "",
-// 		}
+		sendMessage(nodeInfo.Addr, msg)
 
-// 		sendMessage(nodeInfo.Addr, msg)
-
-// 	}
-// }
+	}
+}
 
 func main() {
 
 	port, _ := strconv.Atoi(os.Args[1])
 	nodeID := NodeIDGenerator(port, bitLength)
-	node := NewNode(nodeID)
+	addr := net.UDPAddr{
+		Port: port,
+		IP:   net.ParseIP("127.0.0.1"),
+	}
+
+	node := NewNode(nodeID, addr)
 	fmt.Printf("SERVER NODE ID: %d\n", node.GetID())
 
 	// Run the server in a goroutine
@@ -233,6 +232,7 @@ func main() {
 				Port: toPort,
 				IP:   net.ParseIP("127.0.0.1"),
 			}
+
 			msg := Message{
 				Type:  cmd,
 				From:  node.ID,
@@ -269,6 +269,14 @@ func main() {
 				//Find everyone in the closest bucket and ask them if they have it
 
 			}
+		case "test":
+			addr := net.UDPAddr{
+				Port: 9004,
+				IP:   net.ParseIP("127.0.0.1"),
+			}
+			node.RoutingTable.InsertNode(4, addr)
+
+			node.RoutingTable.PrintRoutingTableSummary()
 
 		}
 

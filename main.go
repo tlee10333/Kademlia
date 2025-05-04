@@ -14,13 +14,13 @@ import (
 )
 
 const bitLength = 4 // Align with node.go's routing table creation
-const K = 5         // Align with node.go's routing table creation
+const K = 2         // Align with node.go's routing table creation
 
 // Message represents a Kademlia RPC-style message
 type Message struct {
 	Type    string      `json:"type"` // ping, store, find_node, find_value
 	From    int         `json:"from"` // Sender node ID
-	IP      net.UDPAddr `json: "ip"`  //IP of original (so from & IP can be different servers)
+	IP      net.UDPAddr `json: "IP"`  //IP of original (so from & IP can be different servers)
 	Key     int         `json:"key,omitempty"`
 	Value   string      `json:"value,omitempty"`
 	Closest []NodeInfo  `json:"closest,omitempty"` // Used for find_node responses
@@ -96,7 +96,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 		response = Message{
 			Type:    "node_response",
 			From:    node.ID,
-			IP:    node.ADDR,
+			IP:      node.ADDR,
 			Closest: closest,
 		}
 
@@ -111,7 +111,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 			response = Message{
 				Type:    "node_response",
 				From:    node.ID,
-				IP:    node.ADDR,
+				IP:      node.ADDR,
 				Key:     msg.Key,
 				Closest: closest,
 			}

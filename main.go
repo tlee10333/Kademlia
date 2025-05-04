@@ -355,19 +355,21 @@ func (node *Node) IterativeStore(key int, value string) {
 	// First find the K closest nodes to the key
 
 	closestNodes := node.IterativeFindNode(key)
+	fmt.Println(closestNodes)
 
 	//Don't forget to sort with the current server node as well
 	currentNode := NewNodeInfo(node.GetID(), node.GetADDR())
 	closestNodes = append(closestNodes, *currentNode)
+	fmt.Println(closestNodes)
 
 	//Complete Sorted List of Nodes
 	node.RoutingTable.SortByDistance(closestNodes, key)
 
 	// Store locally as well
-	node.InsertKV(key, value)
+	//node.InsertKV(key, value)
 
 	// Store the key-value pair at each of these nodes
-	for _, targetNode := range closestNodes {
+	for _, targetNode := range closestNodes[0:K] {
 		msg := Message{
 			Type:  "store",
 			From:  node.ID,
@@ -479,7 +481,6 @@ func main() {
 			key := HashToIntNBits(parts[1], bitLength)
 			value := parts[2]
 
-			fmt.Printf("Storing key %s (ID: %d) with value %s in DHT\n", parts[1], key, value)
 			node.IterativeStore(key, value)
 
 		case "find_value":

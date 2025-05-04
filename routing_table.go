@@ -142,7 +142,6 @@ func (rt *RoutingTable) SortByDistance(nodes []NodeInfo, targetID int) {
 		return distI < distJ
 	})
 
-	fmt.Println(nodes)
 }
 
 // PrintRoutingTableSummary prints a summary of the routing table

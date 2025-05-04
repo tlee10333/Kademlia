@@ -122,6 +122,8 @@ func (rt *RoutingTable) FindClosestNodes(targetID int) []NodeInfo {
 		}
 	}
 
+
+
 	// Sort nodes by XOR distance to target
 	rt.SortByDistance(allNodes, targetID)
 
@@ -139,6 +141,8 @@ func (rt *RoutingTable) SortByDistance(nodes []NodeInfo, targetID int) {
 		distJ := Xor(nodes[j].ID, targetID)
 		return distI < distJ
 	})
+
+	fmt.Println(nodes)
 }
 
 // PrintRoutingTableSummary prints a summary of the routing table

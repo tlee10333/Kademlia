@@ -126,7 +126,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 	conn.WriteToUDP(respBytes, addr)
 }
 
-func sendMessage(addr net.UDPAddr, msg Message) (*Message, error) {
+func sendMessage(addr net.UDPAddr, msg Message, node *Node) (*Message, error) {
 
 	conn, err := net.DialUDP("udp", nil, &addr) //When we actually send messages, we open up a random port and send it
 	if err != nil {
@@ -159,6 +159,9 @@ func sendMessage(addr net.UDPAddr, msg Message) (*Message, error) {
 	}
 
 	fmt.Printf("Response type: %s\n", response.Type)
+
+	node.RoutingTable.InsertNode(response.From, response.IP)
+
 	return &response, nil
 }
 
@@ -236,7 +239,7 @@ func (node *Node) IterativeFindValue(key int) string {
 		}
 
 		fmt.Println(targetNode.Addr)
-		response, err := sendMessage(targetNode.Addr, msg)
+		response, err := sendMessage(targetNode.Addr, msg, node)
 
 		if err != nil {
 			fmt.Printf("Error contacting node %d: %v\n", targetNode.ID, err)
@@ -273,6 +276,8 @@ func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
 	queried := make(map[int]bool)
 
 	// Create a list to track all nodes we've found
+	//Don't forget to include the current server node in allFoundNodes
+
 	var allFoundNodes []NodeInfo
 	for _, nodeInfo := range closestNodes {
 		if nodeInfo.ID != node.ID { // Don't include ourselves
@@ -309,7 +314,7 @@ func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
 			Key:  targetID,
 		}
 
-		response, err := sendMessage(targetNode.Addr, msg)
+		response, err := sendMessage(targetNode.Addr, msg, node)
 		if err != nil {
 			fmt.Printf("Error contacting node %d: %v\n", targetNode.ID, err)
 			continue
@@ -348,7 +353,15 @@ func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
 // Iterative Store - stores a key-value pair at the K closest nodes to the key
 func (node *Node) IterativeStore(key int, value string) {
 	// First find the K closest nodes to the key
+
 	closestNodes := node.IterativeFindNode(key)
+
+	//Don't forget to sort with the current server node as well
+	currentNode := NewNodeInfo(node.GetID(), node.GetADDR())
+	closestNodes = append(closestNodes, *currentNode)
+
+	//Complete Sorted List of Nodes
+	node.RoutingTable.SortByDistance(closestNodes, key)
 
 	// Store locally as well
 	node.InsertKV(key, value)
@@ -362,7 +375,7 @@ func (node *Node) IterativeStore(key int, value string) {
 			Value: value,
 		}
 
-		_, err := sendMessage(targetNode.Addr, msg)
+		_, err := sendMessage(targetNode.Addr, msg, node)
 		if err != nil {
 			fmt.Printf("Failed to store at node %d: %v\n", targetNode.ID, err)
 		} else {
@@ -392,32 +405,6 @@ func main() {
 
 	// Give it a moment to start
 	time.Sleep(1 * time.Second)
-
-	// Bootstrap if another node is specified
-	if len(os.Args) > 2 {
-		bootstrapPort, _ := strconv.Atoi(os.Args[2])
-		bootstrapAddr := net.UDPAddr{
-			Port: bootstrapPort,
-			IP:   net.ParseIP("127.0.0.1"),
-		}
-
-		// Send ping to bootstrap node
-		pingMsg := Message{
-			Type: "ping",
-			From: node.ID,
-		}
-
-		response, err := sendMessage(bootstrapAddr, pingMsg)
-		if err == nil && response.Type == "pong" {
-			fmt.Printf("Successfully bootstrapped with node at port %d\n", bootstrapPort)
-
-			// Add bootstrap node to routing table
-			node.RoutingTable.InsertNode(response.From, bootstrapAddr)
-
-			// Optional: Perform a find_node on our own ID to populate routing table
-			node.IterativeFindNode(node.ID)
-		}
-	}
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -459,7 +446,7 @@ func main() {
 				IP:   node.ADDR,
 				From: node.ID,
 			}
-			sendMessage(addr, msg)
+			sendMessage(addr, msg, node)
 
 		case "store":
 			if len(parts) < 4 {
@@ -482,7 +469,7 @@ func main() {
 				IP:   net.ParseIP("127.0.0.1"),
 			}
 
-			sendMessage(addr, msg)
+			sendMessage(addr, msg, node)
 
 		case "store_dht":
 			if len(parts) < 3 {

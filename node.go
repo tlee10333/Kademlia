@@ -25,6 +25,9 @@ func (node *Node) GetID() int {
 	return node.ID
 }
 
+func (node *Node) GetADDR() net.UDPAddr{
+	return node.ADDR
+} 
 func (node *Node) FindKV(key int) (string, bool) {
 	value, isFound := node.KV[key]
 	return value, isFound

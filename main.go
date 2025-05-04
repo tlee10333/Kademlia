@@ -76,9 +76,10 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 	case "ping":
 		// RPC 1: PING - just respond to confirm we're alive
 		response = Message{
-			Type: "pong",
+			Type: "node_alive",
 			IP:   node.ADDR,
-			From: node.ID}
+			From: node.ID,
+		}
 
 	case "store":
 		// RPC 2: STORE - store the key-value pair locally
@@ -426,6 +427,7 @@ func main() {
 	fmt.Println("  store_dht <key> <value> - Store key-value pair in DHT")
 	fmt.Println("  find_value <key> - Find value for key in DHT")
 	fmt.Println("  find_node <nodeID> - Find nodes closest to nodeID")
+	fmt.Println("  print_rtable - Print Server Node Routing Table")
 	fmt.Println("  quit - Exit the program")
 
 	// SuperLoop for Sending Messages
@@ -530,6 +532,8 @@ func main() {
 					i+1, nodeInfo.ID, nodeInfo.Addr.IP, nodeInfo.Addr.Port)
 			}
 
+		case "print_rtable":
+			node.RoutingTable.PrintRoutingTableSummary()
 		case "quit":
 			fmt.Println("Exiting...")
 			return
@@ -537,5 +541,7 @@ func main() {
 		default:
 			fmt.Println("Unknown command. Available commands: ping, store, store_dht, find_value, find_node, quit")
 		}
+
+		fmt.Println("") //So messages aren't so clumped together
 	}
 }

@@ -80,8 +80,12 @@ func (rt *RoutingTable) InsertNode(nodeID int, NodeAddr net.UDPAddr) {
 
 			bucket[nodeID] = *NewNodeInfo(nodeID, NodeAddr) // Replace with actual address
 			distance := Xor(rt.SelfID, nodeID)
+
+			//PRINT STATEMENTS FOR DEMO/CONCEPTUAL COMPREHENSION
 			fmt.Printf("Node ID %d distance to self Node %d is XOR of %04b and %04b which is %04b \n", nodeID, rt.SelfID, nodeID, rt.SelfID, distance)
 			fmt.Printf("Successfully added node %d to bucket %d\n", nodeID, prefixIndex)
+			fmt.Println("")
+			rt.PrintRoutingTableSummary()
 		} else {
 			fmt.Printf("Bucket %d is full, dropping node %d\n", prefixIndex, nodeID)
 		}
@@ -108,7 +112,7 @@ func (rt *RoutingTable) DeleteNode(nodeID int) {
 
 // FindClosestNodes returns the k nodes closest to the target ID
 func (rt *RoutingTable) FindClosestNodes(targetID int) []NodeInfo {
-	count := rt.K 
+	count := rt.K
 
 	// Collect all nodes from all buckets
 	var allNodes []NodeInfo
@@ -145,10 +149,10 @@ func (rt *RoutingTable) PrintRoutingTableSummary() {
 	for i, bucket := range rt.Buckets {
 		nodeCount := len(bucket)
 		if nodeCount > 0 {
-			fmt.Printf("  Bucket %d: %d nodes\n", i, nodeCount)
+			fmt.Printf("BUCKET %d \n", i)
+			rt.PrintBucketList(bucket)
 			totalNodes += nodeCount
 		}
 	}
-
 	fmt.Printf("Total nodes: %d\n", totalNodes)
 }

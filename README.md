@@ -3,14 +3,14 @@ DHT Algorithm PoC
 
 This is a basic implementation of a Distributed Hash Table (DHT), specifically using Kademlia's algorithm and protocol in Golang. Kademlia is a peer-to-peer (P2P) overlay network protocol used for decentralized lookup and storage, most famously used in BitTorrent and IPFS.
 
-In this sample, K= 2 and bitLength = 4. 
-Features
+In this sample, K= 2 and bitLength = 4.
+Features:
+
 - XOR distance metric for node lookup
 - K-bucket routing table with eviction policy
 - Node discovery using recursive FIND_NODE
 - Basic message types: PING, STORE, FIND_NODE, FIND_VALUE
-- Configurable K (bucket size) and α (parallelism)
-- Simulated node joining and lookup logic (local, no networking)
+
 
 To run this, first clone this repository through a terminal/command prompt
 
@@ -38,7 +38,7 @@ Below are all possible commands:
 - print_rtable — Print the routing table of the current server node.
 
 ## Sample Sequence
-Below is a sample sequence:
+Below is a sample sequence between 2 servers, showcasing how ping, store, and find_value work between these two servers. 
 
 1. START SERVER 1
 ```

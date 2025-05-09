@@ -3,6 +3,22 @@ DHT Algorithm PoC
 
 This is a basic implementation of a Distributed Hash Table (DHT), specifically using Kademlia's algorithm and protocol in Golang. Kademlia is a peer-to-peer (P2P) overlay network protocol used for decentralized lookup and storage, most famously used in BitTorrent and IPFS.
 
+All the libraries used are part of Golang's standard libary:
+
+```
+import (
+	"bufio"
+	"crypto/sha1"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"net"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+```
 In this sample, K= 2 and bitLength = 4.
 Features:
 

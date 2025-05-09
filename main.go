@@ -18,7 +18,7 @@ const K = 2         // Align with node.go's routing table creation
 
 // Message represents a Kademlia RPC-style message
 type Message struct {
-	Type    string      `json:"type"` // ping, store, find_node, find_value
+	Type    string      `json:"type"` // ping, store, find_node, find_value, etc
 	From    int         `json:"from"` // Sender node ID
 	IP      net.UDPAddr `json: "IP"`  //IP of original (so from & IP can be different servers)
 	Key     int         `json:"key,omitempty"`
@@ -105,27 +105,39 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 		// RPC 4: FIND_VALUE - return value if we have it, otherwise act like FIND_NODE
 		if value, found := node.FindKV(msg.Key); found {
 			fmt.Printf("Found value for key %d: %s\n", msg.Key, value)
-			response = Message{Type: "found_value", From: node.ID, Key: msg.Key, Value: value}
+			response = Message{
+				Type:  "found_value",
+				From:  node.ID,
+				IP:    node.ADDR,
+				Key:   msg.Key,
+				Value: value}
 		} else {
 			fmt.Printf("Value not found for key %d, returning closest nodes\n", msg.Key)
+
 			closest := node.RoutingTable.FindClosestNodes(msg.Key)
 			response = Message{
 				Type:    "node_response",
 				From:    node.ID,
-				IP:      node.ADDR,
+				IP:      msg.IP, //Preserve original server IP
 				Key:     msg.Key,
 				Closest: closest,
 			}
+
 		}
 
 	default:
-		response = Message{Type: "error", From: node.ID}
+		response = Message{
+			Type: "error",
+			From: node.ID,
+			IP:   node.ADDR}
 	}
 
+	//SEND RESPONSE BACK
 	respBytes, _ := json.Marshal(response)
 	conn.WriteToUDP(respBytes, addr)
 }
 
+// Sending messages
 func sendMessage(addr net.UDPAddr, msg Message, node *Node) (*Message, error) {
 
 	conn, err := net.DialUDP("udp", nil, &addr) //When we actually send messages, we open up a random port and send it
@@ -175,6 +187,7 @@ func Atoi(s string) int {
 	return num
 }
 
+// Our Hash Function
 func HashToIntNBits(input string, n int) int {
 	if n <= 0 || n > 31 { // conservative for 32-bit systems
 		panic("HashToIntNBits: n must be between 1 and 31")
@@ -182,6 +195,7 @@ func HashToIntNBits(input string, n int) int {
 
 	fullHash := sha1.Sum([]byte(input)) // [20]byte = 160 bits
 
+	//THIS CONVERTS OUR HASH TO AN INT. ONLY FOR DEMO PURPOSES.
 	// Convert hash to big.Int
 	hashInt := new(big.Int).SetBytes(fullHash[:])
 
@@ -200,75 +214,43 @@ func NodeIDGenerator(number int, n int) int {
 	return lastBits
 }
 
-// Iterative FindValue - tries to find a value across the network
-func (node *Node) IterativeFindValue(key int) string {
+// find_value - tries to find a value across the network
+func (node *Node) FindValue(addr net.UDPAddr, key int) string {
 	// First check if we have the value locally
 	if value, found := node.FindKV(key); found {
 		return value
 	}
 
-	// If not found locally, we need to perform the iterative lookup
-	closestNodes := node.RoutingTable.FindClosestNodes(key)
+	// First find the K closest nodes to the key
+	closestNodes := node.IterativeFindNode(addr, key)
 
-	// Track nodes we've already queried
-	queried := make(map[int]bool)
-
-	// Create a shortlist of nodes to query
-	var shortlist []NodeInfo
-	for _, nodeInfo := range closestNodes {
-		if nodeInfo.ID != node.ID { // Don't query ourselves
-			shortlist = append(shortlist, nodeInfo)
-		}
-	}
-
-	for len(shortlist) > 0 && len(queried) < K {
-		// Take the first node from the shortlist
-		targetNode := shortlist[0]
-		shortlist = shortlist[1:]
-
-		if queried[targetNode.ID] {
-			continue // Skip if we've already queried this node
-		}
-		queried[targetNode.ID] = true
-
+	// Query nodes of up to K nodes (you can change this to something else too)
+	for _, targetNode := range closestNodes[0:K] {
 		// Send FIND_VALUE message
 		msg := Message{
 			Type: "find_value",
 			From: node.ID,
+			IP:   addr,
 			Key:  key,
 		}
 
-		fmt.Println(targetNode.Addr)
 		response, err := sendMessage(targetNode.Addr, msg, node)
-
-		if err != nil {
-			fmt.Printf("Error contacting node %d: %v\n", targetNode.ID, err)
-			continue
-		}
-
-		if response.Type == "found_value" {
+		if err == nil && response.Type == "found_value" {
 			fmt.Printf("Found value for key %d at node %d: %s\n", key, targetNode.ID, response.Value)
-			// Store the value locally for caching
-			node.InsertKV(key, response.Value)
 			return response.Value
-		} else if response.Type == "node_response" {
-			// Add returned nodes to the shortlist if we haven't queried them yet
-			for _, newNode := range response.Closest {
-				if !queried[newNode.ID] && newNode.ID != node.ID {
-					shortlist = append(shortlist, newNode)
-				}
-			}
-
-			// Sort shortlist by distance to target key
-			node.RoutingTable.SortByDistance(shortlist, key)
+		} else {
+			fmt.Printf("Not found in server: %d \n", response.From)
 		}
+
 	}
 
-	return "" // Not found
+	fmt.Println("DID NOT FIND KEY IN DHT")
+	return ""
+
 }
 
 // Iterative FindNode - finds the K closest nodes to a given key
-func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
+func (node *Node) IterativeFindNode(addr net.UDPAddr, targetID int) []NodeInfo {
 	// Start with the closest nodes we know
 	closestNodes := node.RoutingTable.FindClosestNodes(targetID)
 
@@ -285,7 +267,7 @@ func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
 		}
 	}
 
-	for len(allFoundNodes) > 0 && len(queried) < K {
+	for len(allFoundNodes) > 0 {
 		// Take the closest unqueried node
 		node.RoutingTable.SortByDistance(allFoundNodes, targetID)
 		var targetNode NodeInfo
@@ -311,6 +293,7 @@ func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
 		msg := Message{
 			Type: "find_node",
 			From: node.ID,
+			IP:   addr,
 			Key:  targetID,
 		}
 
@@ -350,12 +333,14 @@ func (node *Node) IterativeFindNode(targetID int) []NodeInfo {
 	return allFoundNodes
 }
 
-// Iterative Store - stores a key-value pair at the K closest nodes to the key
-func (node *Node) IterativeStore(key int, value string) {
-	// First find the K closest nodes to the key
+// Our store_dht logic
+func (node *Node) storeDHT(addr net.UDPAddr, key int, value string) {
 
-	closestNodes := node.IterativeFindNode(key)
+	// First find the K closest nodes to the key
+	closestNodes := node.IterativeFindNode(addr, key)
 	fmt.Println(closestNodes)
+
+	//confirm these nodes exist & add to rtable
 
 	//Don't forget to sort with the current server node as well
 	currentNode := NewNodeInfo(node.GetID(), node.GetADDR())
@@ -365,14 +350,13 @@ func (node *Node) IterativeStore(key int, value string) {
 	//Complete Sorted List of Nodes
 	node.RoutingTable.SortByDistance(closestNodes, key)
 
-	// Store locally as well
-	//node.InsertKV(key, value)
-
 	// Store the key-value pair at each of these nodes
 	for _, targetNode := range closestNodes[0:K] {
 		msg := Message{
-			Type:  "store",
-			From:  node.ID,
+			Type: "store",
+			From: node.ID,
+			IP:   addr,
+
 			Key:   key,
 			Value: value,
 		}
@@ -392,7 +376,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	port, _ := strconv.Atoi(os.Args[1])
+	port := Atoi(os.Args[1])
 	nodeID := NodeIDGenerator(port, bitLength)
 	addr := net.UDPAddr{
 		Port: port,
@@ -419,7 +403,7 @@ func main() {
 	fmt.Println("  print_rtable - Print Server Node Routing Table")
 	fmt.Println("  quit - Exit the program")
 
-	// SuperLoop for Sending Messages
+	// SuperLoop for SENDING Messages
 	for {
 		fmt.Print("\nEnter command: ")
 		line, _ := reader.ReadString('\n')
@@ -481,7 +465,7 @@ func main() {
 			key := HashToIntNBits(parts[1], bitLength)
 			value := parts[2]
 
-			node.IterativeStore(key, value)
+			node.storeDHT(addr, key, value)
 
 		case "find_value":
 			if len(parts) < 2 {
@@ -496,7 +480,7 @@ func main() {
 				fmt.Printf("Key %s (ID: %d) is in local node %d with value: %s\n", parts[1], key, node.ID, value)
 			} else {
 				fmt.Printf("Key %s (ID: %d) not found locally, searching DHT...\n", parts[1], key)
-				value = node.IterativeFindValue(key)
+				value = node.FindValue(addr, key)
 				if value != "" {
 					fmt.Printf("Found key %s (ID: %d) in DHT with value: %s\n", parts[1], key, value)
 				} else {
@@ -509,10 +493,10 @@ func main() {
 				fmt.Println("Usage: find_node <nodeID>")
 				continue
 			}
-			targetID, _ := strconv.Atoi(parts[1])
+			targetID := Atoi(parts[1])
 
 			fmt.Printf("Finding nodes closest to %d...\n", targetID)
-			closestNodes := node.IterativeFindNode(targetID)
+			closestNodes := node.IterativeFindNode(node.ADDR, targetID)
 
 			fmt.Printf("Found %d nodes:\n", len(closestNodes))
 			for i, nodeInfo := range closestNodes {

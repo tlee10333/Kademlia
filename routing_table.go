@@ -50,9 +50,12 @@ func NewRoutingTable(selfID int, IDBits int, k int) *RoutingTable {
 // Either find the node, or the bucket it should be in
 func (rt *RoutingTable) FindNode(nodeID int) (bool, int, Bucket) {
 	distance := Xor(rt.SelfID, nodeID)
+	prefixIndex := distance
 
 	//Finds highest set bit (highest 1 in binary from right to left)
-	prefixIndex := bits.Len(uint(distance)) - 1 //math/bits only accepts uint
+	if distance > 0 {
+		prefixIndex = bits.Len(uint(distance)) - 1 //math/bits only accepts uint
+	}
 	bucket := rt.Buckets[prefixIndex]
 	_, isFound := bucket[nodeID]
 	return isFound, prefixIndex, bucket
@@ -76,16 +79,8 @@ func (rt *RoutingTable) InsertNode(nodeID int, NodeAddr net.UDPAddr) {
 
 	if !isFound {
 		if len(bucket) < rt.K {
-			fmt.Printf("ADDING PORT: %d \n", NodeAddr.Port)
-
 			bucket[nodeID] = *NewNodeInfo(nodeID, NodeAddr) // Replace with actual address
-			distance := Xor(rt.SelfID, nodeID)
 
-			//PRINT STATEMENTS FOR DEMO/CONCEPTUAL COMPREHENSION
-			fmt.Printf("Node ID %d distance to self Node %d is XOR of %04b and %04b which is %04b \n", nodeID, rt.SelfID, nodeID, rt.SelfID, distance)
-			fmt.Printf("Successfully added node %d to bucket %d\n", nodeID, prefixIndex)
-			fmt.Println("")
-			rt.PrintRoutingTableSummary()
 		} else {
 			fmt.Printf("Bucket %d is full, dropping node %d\n", prefixIndex, nodeID)
 		}
@@ -121,8 +116,6 @@ func (rt *RoutingTable) FindClosestNodes(targetID int) []NodeInfo {
 			allNodes = append(allNodes, node)
 		}
 	}
-
-
 
 	// Sort nodes by XOR distance to target
 	rt.SortByDistance(allNodes, targetID)

@@ -1,57 +1,75 @@
 # Kademlia
 DHT Algorithm PoC
 
+This is a basic implementation of a Distributed Hash Table (DHT), specifically using Kademlia's algorithm and protocol in Golang. Kademlia is a peer-to-peer (P2P) overlay network protocol used for decentralized lookup and storage, most famously used in BitTorrent and IPFS.
+
+In this sample, K= 2 and bitLength = 4. 
+Features
+- XOR distance metric for node lookup
+- K-bucket routing table with eviction policy
+- Node discovery using recursive FIND_NODE
+- Basic message types: PING, STORE, FIND_NODE, FIND_VALUE
+- Configurable K (bucket size) and α (parallelism)
+- Simulated node joining and lookup logic (local, no networking)
+
+To run this, first clone this repository through a terminal/command prompt
+
+```
+git clone https://github.com/yourusername/Kademlia.git
+cd Kademlia
+```
+To run this project, you can just do:
+
+```
+go run main.go routing_table.go node.go <PORT #>
+```
+This spins up a Kademlia node listening on port <PORT #> with a basic terminal interface. Currently, the code has been set to generate a server ID based on the port number of the last digits of the port number, restricted by how many bits we want to work with (currently bitLength is set to 4 bits), so port 8010 will give us a server ID of 10, 9011 gives us server ID of 11, etc. The code also currently restricts to UDP communication between ports only on localhost.
 
 
-Node.go
+By opening up multiple terminals and having multiple servers on different ports, you can see different communication between servers. 
 
-Data Structures
+Below are all possible commands:
 
-Node consistents of:
+- ping <port> — Send a ping to a node running on the specified port.
+- store <port> <key> <value> — Store a key-value pair at a specific node.
+- store_dht <key> <value> — Store a key-value pair in the distributed hash table (DHT).
+- find_value <key> — Find the value associated with a key in the DHT.
+- find_node <nodeID> — Find nodes closest to the given node ID.
+- print_rtable — Print the routing table of the current server node.
 
-1.  the Server Node ID (int)
+## Sample Sequence
+Below is a sample sequence:
 
-2. KV pair where:
-    key = hashed int of the string key
-    value= string
-3. RoutingTable: A Routing Table
+1. START SERVER 1
+```
+go run main.go routing_table.go node.go 8001
+```
 
+2. START SERVER 2 (seperate terminal)
+```
+go run main.go routing_table.go node.go 8002
 
-Routing_table.go
+```
 
+3. PING (From server 1)
+```
+ping 8002
+```
+If 8002 does not exist or does not respond fast enough, server 1 will delete it from their routing table if the server was in their routing table. In this example this doesn't apply, but you can delete server 2 after ping to see this in action. 
 
-NodeInfo Cosistents of:
-0. ID node ID int
-1. Addr = net.UDPAddr type (IP, Port, Zone)
-2. Timestamp = int64 (automatically set whenever we add or interact with the node)
+4. STORE (from server 1)
+```
+store 8001 hello world
+```
+This will store hello world KV pair onto server 1 (regardless of ID distance)
 
-Different Types of Commands
+5. FIND_VALUE (from server 2)
+```
+find_value hello
+```
+This will allow server 2 to query server 1 to see if it has the value to hello. 
 
-4 Protocols
-
-1. Ping
-2. Store
-3. Find_value
-4. Find_node
-
-
-
-Good demo/test for find_value
-
-Server 1: 8001
-
-distance between 1 and 4: 5 (0101)
-distance between 1 and 12: 13 (1101)
-distance between 1 and 13: 12 (1100)
-distance between 1 and 15: 14 (1110) //Gonna be ignored
+If you have 3+ servers, you can do `store_dht` which will automatically decide where to allocate the KV pair based on how close the key is to the server ID via XOR (K=2 for redundancy)
 
 
-Server 4: 8004
-distance between 4 and 15: 11 (1011)
-
-Server 12 8012
-distance between 12 and 13: 1 (0001)
-
-Server 13 8013
-Server 15 8015
 

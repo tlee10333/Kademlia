@@ -20,6 +20,7 @@ const K = 2         // Align with node.go's routing table creation
 type Message struct {
 	Type    string      `json:"type"` // ping, store, find_node, find_value, etc
 	From    int         `json:"from"` // Sender node ID
+	To      int         `json:"to"`   // Recipient ID
 	IP      net.UDPAddr `json: "IP"`  //IP of original (so from & IP can be different servers)
 	Key     int         `json:"key,omitempty"`
 	Value   string      `json:"value,omitempty"`
@@ -79,6 +80,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 			Type: "node_alive",
 			IP:   node.ADDR,
 			From: node.ID,
+			To:   msg.From,
 		}
 
 	case "store":
@@ -88,7 +90,9 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 		response = Message{
 			Type: "store_ack",
 			IP:   node.ADDR,
-			From: node.ID}
+			From: node.ID,
+			To:   msg.From,
+		}
 
 	case "find_node":
 		// RPC 3: FIND_NODE - return k closest nodes to the target ID
@@ -97,6 +101,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 		response = Message{
 			Type:    "node_response",
 			From:    node.ID,
+			To:      msg.From,
 			IP:      node.ADDR,
 			Closest: closest,
 		}
@@ -108,6 +113,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 			response = Message{
 				Type:  "found_value",
 				From:  node.ID,
+				To:    msg.From,
 				IP:    node.ADDR,
 				Key:   msg.Key,
 				Value: value}
@@ -118,6 +124,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 			response = Message{
 				Type:    "node_response",
 				From:    node.ID,
+				To:      msg.From,
 				IP:      msg.IP, //Preserve original server IP
 				Key:     msg.Key,
 				Closest: closest,
@@ -129,6 +136,7 @@ func handleMessage(conn *net.UDPConn, node *Node, data []byte, addr *net.UDPAddr
 		response = Message{
 			Type: "error",
 			From: node.ID,
+			To:   msg.From,
 			IP:   node.ADDR}
 	}
 
@@ -159,7 +167,15 @@ func sendMessage(addr net.UDPAddr, msg Message, node *Node) (*Message, error) {
 	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	n, _, err := conn.ReadFromUDP(buffer)
 	if err != nil {
+		//If we don't get a response
 		fmt.Println("Error receiving response:", err)
+		//CHeck if this was a node we used to have in our routing table
+		isFound, _, _ := node.RoutingTable.FindNode(msg.To)
+		//If it was in our routing table but the server is now down, remove it
+		if isFound {
+			node.RoutingTable.DeleteNode(msg.To)
+			fmt.Printf("REMOVING SERVER %d FROM RTABLE DUE TO NO RESPONSE \n", msg.To)
+		}
 		return nil, err
 	}
 
@@ -224,27 +240,38 @@ func (node *Node) FindValue(addr net.UDPAddr, key int) string {
 	// First find the K closest nodes to the key
 	closestNodes := node.IterativeFindNode(addr, key)
 
-	// Query nodes of up to K nodes (you can change this to something else too)
-	for _, targetNode := range closestNodes[0:K] {
-		// Send FIND_VALUE message
-		msg := Message{
-			Type: "find_value",
-			From: node.ID,
-			IP:   addr,
-			Key:  key,
+	//Make sure closestNodes != 0
+	if len(closestNodes) != 0 {
+		//In case len(closestNodes) < K, we avoid a out of index error
+		limit := K
+		if len(closestNodes) < K {
+			limit = len(closestNodes)
 		}
 
-		response, err := sendMessage(targetNode.Addr, msg, node)
-		if err == nil && response.Type == "found_value" {
-			fmt.Printf("Found value for key %d at node %d: %s\n", key, targetNode.ID, response.Value)
-			return response.Value
-		} else {
-			fmt.Printf("Not found in server: %d \n", response.From)
+		// Query nodes of up to K nodes (you can change this to something else too)
+		for _, targetNode := range closestNodes[0:limit] {
+			// Send FIND_VALUE message
+			msg := Message{
+				Type: "find_value",
+				From: node.ID,
+				To:   targetNode.ID,
+				IP:   addr,
+				Key:  key,
+			}
+
+			response, err := sendMessage(targetNode.Addr, msg, node)
+			if err == nil && response.Type == "found_value" {
+				fmt.Printf("Found value for key %d at node %d: %s\n", key, targetNode.ID, response.Value)
+				return response.Value
+			} else {
+				fmt.Printf("Not found in server: %d \n", response.From)
+			}
+
 		}
 
 	}
 
-	fmt.Println("DID NOT FIND KEY IN DHT")
+	//We didn't find the key
 	return ""
 
 }
@@ -293,6 +320,7 @@ func (node *Node) IterativeFindNode(addr net.UDPAddr, targetID int) []NodeInfo {
 		msg := Message{
 			Type: "find_node",
 			From: node.ID,
+			To:   targetNode.ID,
 			IP:   addr,
 			Key:  targetID,
 		}
@@ -340,34 +368,39 @@ func (node *Node) storeDHT(addr net.UDPAddr, key int, value string) {
 	closestNodes := node.IterativeFindNode(addr, key)
 	fmt.Println(closestNodes)
 
-	//confirm these nodes exist & add to rtable
-
 	//Don't forget to sort with the current server node as well
 	currentNode := NewNodeInfo(node.GetID(), node.GetADDR())
 	closestNodes = append(closestNodes, *currentNode)
-	fmt.Println(closestNodes)
 
 	//Complete Sorted List of Nodes
 	node.RoutingTable.SortByDistance(closestNodes, key)
+	if len(closestNodes) != 0 {
+		//In case len(closestNodes) < K, we avoid a out of index error
+		limit := K
+		if len(closestNodes) < K {
+			limit = len(closestNodes)
+		}
+		// Store the key-value pair at each of these nodes
+		for _, targetNode := range closestNodes[0:limit] {
+			msg := Message{
+				Type:  "store",
+				From:  node.ID,
+				IP:    addr,
+				To:    targetNode.ID,
+				Key:   key,
+				Value: value,
+			}
 
-	// Store the key-value pair at each of these nodes
-	for _, targetNode := range closestNodes[0:K] {
-		msg := Message{
-			Type: "store",
-			From: node.ID,
-			IP:   addr,
-
-			Key:   key,
-			Value: value,
+			_, err := sendMessage(targetNode.Addr, msg, node)
+			if err != nil {
+				fmt.Printf("Failed to store at node %d: %v\n", targetNode.ID, err)
+			} else {
+				fmt.Printf("Successfully stored key %d at node %d\n", key, targetNode.ID)
+			}
 		}
 
-		_, err := sendMessage(targetNode.Addr, msg, node)
-		if err != nil {
-			fmt.Printf("Failed to store at node %d: %v\n", targetNode.ID, err)
-		} else {
-			fmt.Printf("Successfully stored key %d at node %d\n", key, targetNode.ID)
-		}
 	}
+
 }
 
 func main() {
@@ -422,6 +455,8 @@ func main() {
 				continue
 			}
 			toPort := Atoi(parts[1])
+			key := NodeIDGenerator(toPort, bitLength)
+
 			addr := net.UDPAddr{
 				Port: toPort,
 				IP:   net.ParseIP("127.0.0.1"),
@@ -431,6 +466,7 @@ func main() {
 				Type: "ping",
 				IP:   node.ADDR,
 				From: node.ID,
+				To:   key,
 			}
 			sendMessage(addr, msg, node)
 
@@ -440,12 +476,13 @@ func main() {
 				continue
 			}
 			toPort := Atoi(parts[1])
-			key := HashToIntNBits(parts[2], bitLength)
+			key := NodeIDGenerator(toPort, bitLength)
 			value := parts[3]
 
 			msg := Message{
 				Type:  "store",
 				From:  node.ID,
+				To:    key,
 				IP:    node.ADDR,
 				Key:   key,
 				Value: value,
